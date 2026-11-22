@@ -217,28 +217,44 @@ class NormLines {
   }
 }
 
+/**
+ * KMP failure function for a line pattern: pi[i] is the length of the longest
+ * proper prefix of p[0..i] that is also a suffix of p[0..i]. After a mismatch
+ * at pattern position `len`, the search can resume at pi[len - 1] instead of
+ * restarting at 0, which keeps the whole scan linear in the text length.
+ */
+function prefixTable(p: string[]): number[] {
+  const pi = new Array<number>(p.length).fill(0);
+  let len = 0;
+  for (let i = 1; i < p.length; i++) {
+    while (len > 0 && p[i] !== p[len]) len = pi[len - 1]!;
+    if (p[i] === p[len]) len++;
+    pi[i] = len;
+  }
+  return pi;
+}
+
 /** Positions at or after `from` where O occurs at `tier` (overlaps count); at most `limit` (0: all). */
 function occurrences(nl: NormLines, o: string[], tier: number, from: number, eofOnly: boolean, limit: number): number[] {
+  const out: number[] = [];
+  if (o.length === 0) return out;
   const arr = nl.at(tier);
   const normO = o.map(NORMS[tier]!);
-  const out: number[] = [];
-  const last = nl.lines.length - o.length;
-  let i = from;
-  while (i <= last) {
-    const j = arr.indexOf(normO[0]!, i);
-    if (j < 0 || j > last) break;
-    let ok = true;
-    for (let k = 1; k < normO.length; k++) {
-      if (arr[j + k] !== normO[k]) {
-        ok = false;
-        break;
+  const pi = prefixTable(normO);
+  const n = nl.lines.length;
+  const m = normO.length;
+  let len = 0;
+  for (let i = Math.max(0, from); i < n; i++) {
+    while (len > 0 && arr[i] !== normO[len]) len = pi[len - 1]!;
+    if (arr[i] === normO[len]) len++;
+    if (len === m) {
+      const j = i - m + 1;
+      if (!eofOnly || j + m === n) {
+        out.push(j);
+        if (limit > 0 && out.length >= limit) return out;
       }
+      len = pi[len - 1]!; // allow overlapping occurrences
     }
-    if (ok && (!eofOnly || j + o.length === nl.lines.length)) {
-      out.push(j);
-      if (limit > 0 && out.length >= limit) return out;
-    }
-    i = j + 1;
   }
   return out;
 }
