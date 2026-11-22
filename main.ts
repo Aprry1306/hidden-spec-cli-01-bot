@@ -718,7 +718,11 @@ function parseV4aChunks(raw: { text: string; no: number }[]): VChunk[] {
       continue;
     }
     if (l === '*** End of File') {
-      if (cur === null) cur = { anchor: null, o: [], n: [], ctx: [], eof: false };
+      // SPEC §8: a `*** End of File` line ends a chunk. With no chunk running
+      // there is nothing to end, so the line is a parse error at its own line
+      // (the catch-all "any other line" rule) — it must not conjure an empty
+      // end-of-file chunk, which would poison the cursor for later chunks.
+      if (cur === null) throw new Exit2(`error: parse ${r.no}`);
       cur.eof = true;
       flush();
       continue;

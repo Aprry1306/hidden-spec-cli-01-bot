@@ -1055,6 +1055,38 @@ const cases: Case[] = [
     'A B.txt\nA a.txt\nok: 2 files\n',
     { 'a.txt': 'x\n', 'B.txt': 'y\n' },
   ),
+  // --- FIX #3: `*** End of File` with no chunk running is a parse error at its line (§8) ---
+  // A stray End of File must not conjure an empty end-of-file chunk: the section
+  // has no chunk, and (probe 2) a following @@ chunk must not inherit a poisoned cursor.
+  T(
+    'v22-eof-no-chunk',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n*** End of File\n*** End Patch\n',
+    { 'f.txt': 'a\nb\n' },
+    2,
+    'error: parse 3\n',
+    {},
+  ),
+  // --- FIX #3: `*** End of File` before an @@ chunk is a parse error at the End of File line (§8) ---
+  T(
+    'v23-eof-then-chunk',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n*** End of File\n@@ b\n-b\n+B\n*** End Patch\n',
+    { 'f.txt': 'a\nb\n' },
+    2,
+    'error: parse 3\n',
+    {},
+  ),
+  // --- FIX #3 (control): a chunk WITH content closed by `*** End of File` still applies (§8) ---
+  T(
+    'v24-eof-closes-chunk',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n a\n-b\n+B\n*** End of File\n*** End Patch\n',
+    { 'f.txt': 'a\nb\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': 'a\nB\n' },
+  ),
 ];
 
 let passed = 0;
