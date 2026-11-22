@@ -617,18 +617,27 @@ function parseSearchReplace(lines: string[]): SBlock[] {
     if (path === null) throw new Exit2(`error: parse ${s + 1}`);
     let eq = -1;
     for (let j = s + 1; j < n; j++) {
-      if (lines[j]!.trimEnd() === '=======') {
+      const t = lines[j]!.trimEnd();
+      if (t === '=======') {
         eq = j;
         break;
       }
+      // SPEC §7: a SEARCH line with no ======= and then >>>>>>> REPLACE after it
+      // is a parse error at the SEARCH line; a new <<<<<<< SEARCH before any
+      // ======= ends this block the same way (the block is malformed).
+      if (t === '>>>>>>> REPLACE' || t === '<<<<<<< SEARCH') break;
     }
     if (eq < 0) throw new Exit2(`error: parse ${s + 1}`);
     let rep = -1;
     for (let j = eq + 1; j < n; j++) {
-      if (lines[j]!.trimEnd() === '>>>>>>> REPLACE') {
+      const t = lines[j]!.trimEnd();
+      if (t === '>>>>>>> REPLACE') {
         rep = j;
         break;
       }
+      // A new block starting before this one closed means this block has no
+      // >>>>>>> REPLACE: a parse error at its SEARCH line.
+      if (t === '<<<<<<< SEARCH') break;
     }
     if (rep < 0) throw new Exit2(`error: parse ${s + 1}`);
     blocks.push({ path, oldLines: lines.slice(s + 1, eq), newLines: lines.slice(eq + 1, rep) });
@@ -715,7 +724,13 @@ function parseV4aChunks(raw: { text: string; no: number }[]): VChunk[] {
       continue;
     }
     if (l === '' || l.startsWith(' ') || l.startsWith('-') || l.startsWith('+')) {
-      if (cur === null) cur = { anchor: null, o: [], n: [], ctx: [], eof: false };
+      if (cur === null) {
+        // SPEC §8: a chunk starts at an @@ line, or, for the first chunk, at a body
+        // line. A body line after an earlier chunk was flushed (e.g. by
+        // *** End of File) is a parse error at that line, not a second chunk.
+        if (chunks.length > 0) throw new Exit2(`error: parse ${r.no}`);
+        cur = { anchor: null, o: [], n: [], ctx: [], eof: false };
+      }
       if (l === '' || l.startsWith(' ')) {
         const t = l === '' ? '' : l.slice(1);
         cur.ctx.push(cur.o.length);

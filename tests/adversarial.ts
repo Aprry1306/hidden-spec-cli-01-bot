@@ -828,6 +828,233 @@ const cases: Case[] = [
     'M f.txt\nok: 1 file\n',
     { 'f.txt': 'a\nB\nc\n' },
   ),
+  // --- FIX #1 (Gate 2): a body line after *** End of File flushed the first chunk (§8) ---
+  // Only the FIRST chunk may start at a body line; the -b line here is parse 6.
+  T(
+    'v17-body-after-eof',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n-a\n+A\n*** End of File\n-b\n+B\n*** End Patch\n',
+    { 'f.txt': 'a\n' },
+    2,
+    'error: parse 6\n',
+    {},
+  ),
+  // --- FIX #2 (Gate 2): SEARCH/REPLACE block with no =======, single block (§7) ---
+  T(
+    's11-no-eq-single',
+    ['-'],
+    'f.txt\n<<<<<<< SEARCH\na\n>>>>>>> REPLACE\n',
+    { 'f.txt': 'a\n' },
+    2,
+    'error: parse 2\n',
+    {},
+  ),
+  // --- FIX #2 (Gate 2): first block with no =======, followed by a complete block (§7) ---
+  T(
+    's12-no-eq-multi',
+    ['-'],
+    'f.txt\n<<<<<<< SEARCH\na\n<<<<<<< SEARCH\nb\n=======\nB\n>>>>>>> REPLACE\n',
+    { 'f.txt': 'a\nb\n' },
+    2,
+    'error: parse 2\n',
+    {},
+  ),
+  // --- FIX #2 (Gate 2): block with no >>>>>>> REPLACE before the next block (§7) ---
+  T(
+    's13-no-replace-next-block',
+    ['-'],
+    'f.txt\n<<<<<<< SEARCH\na\n=======\nA\n<<<<<<< SEARCH\nb\n=======\nB\n>>>>>>> REPLACE\n',
+    { 'f.txt': 'a\nb\n' },
+    2,
+    'error: parse 2\n',
+    {},
+  ),
+  // --- SEARCH/REPLACE block with no >>>>>>> REPLACE at end of patch (§7) ---
+  T(
+    's14-no-replace-eof',
+    ['-'],
+    'f.txt\n<<<<<<< SEARCH\na\n=======\nA\n',
+    { 'f.txt': 'a\n' },
+    2,
+    'error: parse 2\n',
+    {},
+  ),
+  // --- unified: paths from `diff --git` only, no ---/+++ pair, no rename (§6) ---
+  T(
+    'u35-diff-git-only',
+    ['-'],
+    'diff --git a/f.txt b/f.txt\n@@ -1,1 +1,1 @@\n-a\n+A\n',
+    { 'f.txt': 'a\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': 'A\n' },
+  ),
+  // --- unified: move via ---/+++ pair only, no rename lines, no hunks (§6) ---
+  T(
+    'u36-move-pair-no-rename',
+    ['-'],
+    '--- a/old.txt\n+++ b/new.txt\n',
+    { 'old.txt': 'hello\n' },
+    0,
+    'R old.txt -> new.txt\nok: 1 file\n',
+    { 'old.txt': null, 'new.txt': 'hello\n' },
+  ),
+  // --- unified: move via ---/+++ pair WITH hunks: R line + changed content (§6) ---
+  T(
+    'u37-move-with-hunks',
+    ['-'],
+    '--- a/old.txt\n+++ b/new.txt\n@@ -1,1 +1,1 @@\n-a\n+A\n',
+    { 'old.txt': 'a\n' },
+    0,
+    'R old.txt -> new.txt\nok: 1 file\n',
+    { 'old.txt': null, 'new.txt': 'A\n' },
+  ),
+  // --- unified: change on a file that does not exist -> missing (§6) ---
+  T(
+    'u38-change-missing',
+    ['-'],
+    '--- a/ghost.txt\n+++ b/ghost.txt\n@@ -1,1 +1,1 @@\n-x\n+Y\n',
+    {},
+    1,
+    'error: missing ghost.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- unified: creation on a path that already exists -> exists (§6) ---
+  T(
+    'u39-create-exists',
+    ['-'],
+    'diff --git a/n.txt b/n.txt\nnew file mode 100644\n--- /dev/null\n+++ b/n.txt\n@@ -0,0 +1,1 @@\n+hi\n',
+    { 'n.txt': 'old\n' },
+    1,
+    'error: exists n.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- V4A Add File to a path that already exists -> exists (§8) ---
+  T(
+    'v18-add-exists',
+    ['-'],
+    '*** Begin Patch\n*** Add File: f.txt\n+hi\n*** End Patch\n',
+    { 'f.txt': 'old\n' },
+    1,
+    'error: exists f.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- V4A Delete File of a file that does not exist -> missing (§8) ---
+  T(
+    'v19-delete-missing',
+    ['-'],
+    '*** Begin Patch\n*** Delete File: ghost.txt\n*** End Patch\n',
+    {},
+    1,
+    'error: missing ghost.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- V4A anchor not found anywhere at or after the cursor -> no-match (§8) ---
+  T(
+    'v20-anchor-nomatch',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n@@ zzz\n-a\n+A\n*** End Patch\n',
+    { 'f.txt': 'a\nb\n' },
+    1,
+    'error: no-match f.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- V4A: last non-blank line is not *** End Patch -> parse n+1 (§8) ---
+  T(
+    'v21-end-patch-missing',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n-a\n+A\n',
+    { 'f.txt': 'a\n' },
+    2,
+    'error: parse 5\n',
+    {},
+  ),
+  // --- auto-detect: a non-empty patch matching no format -> error: format (§4) ---
+  T('c18-format-unknown', ['-'], 'hello world\n', {}, 2, 'error: format\n', {}),
+  // --- --format without = is not an option at all -> usage (§1) ---
+  T('c19-format-no-equals', ['--format', 'json', '-'], '{}\n', {}, 2, 'error: usage\n', {}),
+  // --- usage error wins over no-patch (§2) ---
+  T('c20-usage-beats-nopatch', ['--foo', 'missing.patch'], null, {}, 2, 'error: usage\n', {}),
+  // --- --check with a failing edit: same output and exit 1, nothing written (§1) ---
+  T(
+    'c21-check-exit1',
+    ['--check', '-'],
+    '--- a/ghost.txt\n+++ b/ghost.txt\n@@ -1,1 +1,1 @@\n-x\n+Y\n',
+    {},
+    1,
+    'error: missing ghost.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- tier 2: an N line NOT starting with P is written as it is (§5) ---
+  T(
+    'u40-tier2-noline-p',
+    ['-'],
+    '--- a/f.txt\n+++ b/f.txt\n@@ -1,1 +1,1 @@\n-  a\n+x\n',
+    { 'f.txt': '    a\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': 'x\n' },
+  ),
+  // --- tier 2: an N line that is only whitespace is NOT re-indented (§5) ---
+  T(
+    'u41-tier2-whitespace-n',
+    ['-'],
+    '--- a/f.txt\n+++ b/f.txt\n@@ -1,1 +1,1 @@\n-  a\n+  \n+  b\n',
+    { 'f.txt': '    a\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': '  \n    b\n' },
+  ),
+  // --- JSON str_replace without new_str replaces with empty (§9) ---
+  T(
+    'j12-str-replace-no-newstr',
+    ['-'],
+    '{"command": "str_replace", "path": "f.txt", "old_str": "a"}\n',
+    { 'f.txt': 'a\nb\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': '\nb\n' },
+  ),
+  // --- JSON str_replace with an empty old_str is a parse fault (§9) ---
+  T(
+    'j13-str-replace-empty-old',
+    ['-'],
+    '{"command": "str_replace", "path": "f.txt", "old_str": "", "new_str": "x"}\n',
+    { 'f.txt': 'a\n' },
+    2,
+    'error: parse 1\n',
+    {},
+  ),
+  // --- JSON insert with a negative insert_line -> no-match (§9) ---
+  T(
+    'j14-insert-negative',
+    ['-'],
+    '{"command": "insert", "path": "f.txt", "insert_line": -1, "new_str": "x"}\n',
+    { 'f.txt': 'a\nb\n' },
+    1,
+    'error: no-match f.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- JSON Lines: blank lines are ignored (§9) ---
+  T(
+    'j15-jsonlines-blank',
+    ['-'],
+    '{"command": "create", "path": "a.txt", "file_text": "x\\n"}\n\n{"command": "create", "path": "b.txt", "file_text": "y\\n"}\n',
+    {},
+    0,
+    'A a.txt\nA b.txt\nok: 2 files\n',
+    { 'a.txt': 'x\n', 'b.txt': 'y\n' },
+  ),
+  // --- output lines sort in byte order: 'B' (0x42) before 'a' (0x61) (§2) ---
+  T(
+    'c22-sort-byte-order',
+    ['-'],
+    '{"command": "create", "path": "a.txt", "file_text": "x\\n"}\n{"command": "create", "path": "B.txt", "file_text": "y\\n"}\n',
+    {},
+    0,
+    'A B.txt\nA a.txt\nok: 2 files\n',
+    { 'a.txt': 'x\n', 'B.txt': 'y\n' },
+  ),
 ];
 
 let passed = 0;
