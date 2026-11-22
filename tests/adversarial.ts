@@ -768,6 +768,66 @@ const cases: Case[] = [
     'M a.txt\nA b.txt\nok: 2 files\n',
     { 'a.txt': 'brand new\n', 'b.txt': 'old content\n' },
   ),
+  // --- JSON array-form fault reports the line where the ARRAY starts, even after blank lines (§9) ---
+  T(
+    'j10-array-start-after-blanks',
+    ['-'],
+    '\n\n[{"command": "create", "path": "a.txt", "file_text": "x"},\n{"command": "bogus"}]\n',
+    {},
+    2,
+    'error: parse 3\n',
+    {},
+  ),
+  // --- `\` after the last context line does NOT change the final break when the hunk misses EOF (§6) ---
+  T(
+    'u34-backslash-mid-file',
+    ['-'],
+    '--- a/f.txt\n+++ b/f.txt\n@@ -1,2 +1,2 @@\n-a\n+A\n b\n\\ No newline at end of file\n',
+    { 'f.txt': 'a\nb\nc' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': 'A\nb\nc' },
+  ),
+  // --- V4A anchor may match at tier 2 (leading whitespace ignored, §8 + §5) ---
+  T(
+    'v15-anchor-tier2',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n@@ foo\n-bar\n+BAR\n*** End Patch\n',
+    { 'f.txt': '   foo\nbar\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': '   foo\nBAR\n' },
+  ),
+  // --- SEARCH/REPLACE path search skips a ``` fence line (§7) ---
+  T(
+    's10-path-skips-fence',
+    ['-'],
+    '```diff\nf.txt\n<<<<<<< SEARCH\na\n=======\nA\n>>>>>>> REPLACE\n',
+    { 'f.txt': 'a\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': 'A\n' },
+  ),
+  // --- str_replace: in an LF file an old_str holding CRLF is NOT normalised, so no-match (§9) ---
+  T(
+    'j11-crlf-old-in-lf-file',
+    ['-'],
+    '{"command": "str_replace", "path": "f.txt", "old_str": "a\\r\\nb", "new_str": "x"}\n',
+    { 'f.txt': 'a\nb\n' },
+    1,
+    'error: no-match f.txt\nfailed: 1 of 1 edits\n',
+    {},
+  ),
+  // --- V4A: after an anchor the chunk's O is searched past the anchor line (§8) ---
+  T(
+    'v16-anchor-then-o',
+    ['-'],
+    '*** Begin Patch\n*** Update File: f.txt\n@@ a\n-b\n+B\n*** End Patch\n',
+    { 'f.txt': 'a\nb\nc\n' },
+    0,
+    'M f.txt\nok: 1 file\n',
+    { 'f.txt': 'a\nB\nc\n' },
+  ),
 ];
 
 let passed = 0;
